@@ -27,7 +27,7 @@ def default_due_date():
 
 @api_view(['POST', 'GET', 'PUT', 'DELETE'])
 @permission_classes([IsAuthenticated])
-def company_view(request, companyid):
+def company_view(request, companyid=None):
     if request.method == 'GET':
         try:
             company = Company.objects.get(id=companyid)
