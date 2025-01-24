@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Page Not Found</title>
+    <style>
+        :root {
+            --primary-color: #1E3A8A;
+            --secondary-color: #FF6F61;
+            --neutral-color: #708090;
+            --border-color: #6A5ACD;
+            --form-bg-color: #F2F2F2;
+            --hover-color: #003366;
+            --success-bg: #d4edda;
+            --error-bg: #f8d7da;
+            --info-bg: #d1ecf1;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: var(--form-bg-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            text-align: center;
+            border: 2px solid var(--border-color);
+            padding: 50px;
+            background-color: white;
+            border-radius: 8px;
+        }
+
+        h1 {
+            font-size: 3em;
+            color: var(--primary-color);
+        }
+
+        p {
+            font-size: 1.2em;
+            color: var(--neutral-color);
+        }
+
+        a {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: var(--secondary-color);
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+
+        a:hover {
+            background-color: var(--hover-color);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>404</h1>
+        <p>Oops! The page you are looking for cannot be found.</p>
+        <a href="/">Go Back to Homepage</a>
+    </div>
+</body>
+
+</html>

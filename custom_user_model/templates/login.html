@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <style>
+        :root {
+            --primary-color: #1E3A8A;
+            --secondary-color: #FF6F61;
+            --neutral-color: #708090;
+            --border-color: #6A5ACD;
+            --form-bg-color: #F2F2F2;
+            --hover-color: #003366;
+            --success-bg: #d4edda;
+            --error-bg: #f8d7da;
+            --info-bg: #d1ecf1;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: var(--neutral-color);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+        }
+
+        .is_authenticated,
+        .error-message,
+        .info-message {
+            font-size: 14px;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .is_authenticated {
+            background-color: var(--success-bg);
+            color: #155724;
+        }
+
+        .error-message {
+            background-color: var(--error-bg);
+            color: #721c24;
+        }
+
+        .info-message {
+            background-color: var(--info-bg);
+            color: #0c5460;
+            text-align: center;
+        }
+
+        form {
+            max-width: 400px;
+            width: 100%;
+            padding: 20px;
+            background-color: var(--form-bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: left;
+        }
+
+        label {
+            font-weight: bold;
+            display: block;
+            margin: 10px 0 5px;
+            color: var(--primary-color);
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="password"] {
+            width: 90%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+        }
+
+        input[type="submit"] {
+            width: 100%;
+            padding: 10px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+
+        input[type="submit"]:hover {
+            background-color: var(--hover-color);
+        }
+
+        a {
+            text-decoration: none;
+            color: var(--primary-color);
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    {% if user.is_authenticated %}
+    <p class="is_authenticated">You are already logged in</p>
+    <a href="/">Go Back to Homepage</a>
+    <a href="/logout">Logout</a>
+    {% else %}
+    {% if error_message %}
+    <p class="error-message">{{ error_message }}</p>
+    {% endif %}
+    <form method="post" action="">
+        {% csrf_token %}
+        <label for="email">Email:</label>
+        <input type="email" name="email" id="email">
+        <br>
+        <label for="password">Password:</label>
+        <input type="password" name="password" id="password">
+        <br>
+        <input type="submit" value="Login">
+        <p class="info-message">Dont have an account? <a href="/register"><b>Register</b></a></p>
+    </form>
+    {% endif %}
+</body>
+
+</html>
