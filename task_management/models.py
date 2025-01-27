@@ -22,7 +22,7 @@ class Company(models.Model):
     
 class CompanyUser(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    company = models.ForeignKey(Company, on_delete=models.CASCADE)
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='users')
     role = models.CharField(max_length=10, choices=(('ADMIN', 'Admin'), ('USER', 'User')), default='USER')
 
     def __str__(self):

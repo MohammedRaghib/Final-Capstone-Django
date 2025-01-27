@@ -33,9 +33,11 @@ def company_view(request, companyid=None):
             company = Company.objects.get(id=companyid)
             company_tasks = company.tasks.all()
             company_notifications = company.notifications.all()
+            company_users = company.users.all()
 
             company_data = CompanySerializer(company).data
             company_data['tasks'] = TaskSerializer(company_tasks, many=True).data
+            company_data['users'] = CompanyUserSerializer(company_users, many=True).data
             company_data['notifications'] = NotificationSerializer(company_notifications, many=True).data
 
             return Response({'detail': 'Company details fetched', 'company': company_data}, status=status.HTTP_200_OK)
@@ -86,17 +88,24 @@ def company_view(request, companyid=None):
     else:
         return Response({'detail':'No method found'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
         
-@api_view(['POST', 'GET', 'PUT', 'DELETE'])
+@api_view(['GET', 'POST', 'PUT', 'DELETE'])
 @permission_classes([IsAuthenticated])
-def task_view(request, companyid):
+def task_view(request, companyid=None, taskid=None):
     if request.method == 'GET':
-        try:
-            company = Company.objects.get(id=companyid)
-            tasks = company.tasks.all()
-            tasks_data = TaskSerializer(tasks, many=True).data
-            return Response({'detail': 'Tasks fetched', 'tasks': tasks_data}, status=status.HTTP_200_OK)
-        except ObjectDoesNotExist:
-            return Response({'detail': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
+        if taskid: 
+            try:
+                task = Task.objects.get(id=taskid, company__id=companyid)
+                task_data = TaskSerializer(task).data
+                return Response({'detail': 'Task fetched', 'task': task_data}, status=status.HTTP_200_OK)
+            except Task.DoesNotExist:
+                return Response({'detail': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+        else:  
+            try:
+                tasks = Task.objects.filter(company__id=companyid)
+                tasks_data = TaskSerializer(tasks, many=True).data
+                return Response({'detail': 'Tasks fetched', 'tasks': tasks_data}, status=status.HTTP_200_OK)
+            except Company.DoesNotExist:
+                return Response({'detail': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
 
     elif request.method == 'POST':
         try:
@@ -165,7 +174,7 @@ def task_view(request, companyid):
         
 @api_view(['POST', 'GET'])
 @permission_classes([IsAuthenticated])
-def company_user_view(request, companyid):
+def company_user_view(request, companyid=None):
     if request.method == 'GET':
         try:
             company_users = CompanyUser.objects.filter(company__id=companyid)
@@ -190,7 +199,7 @@ def company_user_view(request, companyid):
 
 @api_view(['POST', 'GET', 'DELETE'])
 @permission_classes([IsAuthenticated])
-def comment_view(request, taskid):
+def comment_view(request, taskid=None):
     if request.method == 'GET':
         try:
             comments = Comment.objects.filter(task__id=taskid)
@@ -226,14 +235,19 @@ def comment_view(request, taskid):
 
 @api_view(['POST', 'GET', 'DELETE'])
 @permission_classes([IsAuthenticated])
-def notification_view(request, userid):
+def notification_view(request, userid, notificationid=None):
     if request.method == 'GET':
-        try:
+        if notificationid:
+            try:
+                notification = Notification.objects.get(id=notificationid, user__id=userid)
+                notification_data = NotificationSerializer(notification).data
+                return Response({'detail': 'Notification fetched', 'notification': notification_data}, status=status.HTTP_200_OK)
+            except Notification.DoesNotExist:
+                return Response({'detail': 'Notification not found'}, status=status.HTTP_404_NOT_FOUND)
+        else:
             notifications = Notification.objects.filter(user__id=userid)
             notifications_data = NotificationSerializer(notifications, many=True).data
             return Response({'detail': 'Notifications fetched', 'notifications': notifications_data}, status=status.HTTP_200_OK)
-        except ObjectDoesNotExist:
-            return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
     elif request.method == 'POST':
         try:
@@ -263,3 +277,38 @@ def notification_view(request, userid):
             return Response({'detail': 'Notification not found'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+def get_user_companies(request):
+    if not request.user.is_authenticated:
+        return Response({'detail': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    user = request.user
+
+    admin_companies = Company.objects.filter(admin=user)
+
+    user_companies = CompanyUser.objects.filter(user=user)
+
+    user_info = {
+        'companies': [],
+        'detail': ''
+    }
+
+    if admin_companies.exists():
+        user_info['companies'] = [{
+            'company_id': company.id,
+            'company_name': company.name
+        } for company in admin_companies]
+        user_info['detail'] = 'Admin, User companies found'
+    elif user_companies.exists():
+        companies = [{
+            'company_id': company.company.id,
+            'company_name': company.company.name  
+        } for company in user_companies]
+        user_info['companies'] = companies
+        user_info['detail'] = 'Employee, User companies found'
+    else:
+        user_info['companies'] = []
+        user_info['detail'] = 'No companies found for the user'
+
+    return Response(user_info, status=status.HTTP_200_OK)
