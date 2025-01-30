@@ -2,7 +2,6 @@ from django.contrib import admin
 from .models import *
 
 admin.site.register(Company)
-admin.site.register(CompanyUser)
 admin.site.register(Notification)
 admin.site.register(Comment)
 admin.site.register(Task)

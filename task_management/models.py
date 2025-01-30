@@ -8,6 +8,8 @@ class Company(models.Model):
     plan = models.BooleanField(default=False)
     admin = models.ForeignKey(User, on_delete=models.CASCADE)
     payment_due_date = models.DateField(null=True, blank=True) 
+    users = models.ManyToManyField(User, related_name='users', blank=True)
+    invited_users = models.ManyToManyField(User, related_name='invitedusers', blank=True)
 
     def __str__(self):
         return self.name
@@ -20,13 +22,6 @@ class Company(models.Model):
             return True
         return self.get_user_count() <= 50
     
-class CompanyUser(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='users')
-    role = models.CharField(max_length=10, choices=(('ADMIN', 'Admin'), ('USER', 'User')), default='USER')
-
-    def __str__(self):
-        return self.user.username
     
 def default_due_date():
     return datetime.now() + timedelta(days=30)
@@ -58,7 +53,7 @@ class Comment(models.Model):
     
 class Notification(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='notifications', null=True)
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='company', null=True)
     task = models.ForeignKey(Task, on_delete=models.CASCADE, null=True, blank=True)
     message = models.TextField()
     is_read = models.BooleanField(default=False)

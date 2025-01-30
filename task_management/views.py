@@ -10,17 +10,16 @@ from .models import (
     Company,
     Task,
     Notification,
-    CompanyUser,
     Comment,
 )
 from .serializers import (
     CompanySerializer,
     CommentSerializer,
-    CompanyUserSerializer,
     TaskSerializer,
     NotificationSerializer,
 )
-User = get_user_model
+from custom_user_model.serializer import CustomUserSerializer
+User = get_user_model()
 
 def default_due_date():
     return datetime.now() + timedelta(days=30)
@@ -31,16 +30,18 @@ def company_view(request, companyid=None):
     if request.method == 'GET':
         try:
             company = Company.objects.get(id=companyid)
-            company_tasks = company.tasks.all()
-            company_notifications = company.notifications.all()
+            company_tasks = company.tasks.prefetch_related('assigned_to').all()
+            company_notifications = company.company.all()
             company_users = company.users.all()
+            all_users = User.objects.exclude(id__in=company_users).exclude(id=company.admin.id)
 
             company_data = CompanySerializer(company).data
             company_data['tasks'] = TaskSerializer(company_tasks, many=True).data
-            company_data['users'] = CompanyUserSerializer(company_users, many=True).data
+            company_data['noncompanyusers'] = CustomUserSerializer(all_users, many=True).data
             company_data['notifications'] = NotificationSerializer(company_notifications, many=True).data
+            company_data['detail'] = 'Company details fetched'
 
-            return Response({'detail': 'Company details fetched', 'company': company_data}, status=status.HTTP_200_OK)
+            return Response(company_data, status=status.HTTP_200_OK)
         except ObjectDoesNotExist:
             return Response({'detail': 'No company found'}, status=status.HTTP_404_NOT_FOUND)
         except ValidationError as e:
@@ -87,14 +88,15 @@ def company_view(request, companyid=None):
             return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     else:
         return Response({'detail':'No method found'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
-        
+
 @api_view(['GET', 'POST', 'PUT', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def task_view(request, companyid=None, taskid=None):
+    from rest_framework import status
     if request.method == 'GET':
         if taskid: 
             try:
-                task = Task.objects.get(id=taskid, company__id=companyid)
+                task = Task.objects.prefetch_related('comments').get(id=taskid, company__id=companyid)
                 task_data = TaskSerializer(task).data
                 return Response({'detail': 'Task fetched', 'task': task_data}, status=status.HTTP_200_OK)
             except Task.DoesNotExist:
@@ -133,14 +135,17 @@ def task_view(request, companyid=None, taskid=None):
             
     elif request.method == 'PUT':
         try:
-            task_id = request.data.get('task_id')
+            task_id = taskid
             task = Task.objects.get(id=task_id, company__id=companyid)
+            assigned_ids = request.data.get('assigned_to')
 
+            if assigned_ids is not None:
+                assigned_to = User.objects.filter(id__in=assigned_ids)
+                task.assigned_to.set(assigned_to)
             title = request.data.get('title')
             description = request.data.get('description')
-            assigned_to = User.objects.filter(id__in=request.data.get('assigned_to'))
             due_date = request.data.get('due_date')
-            status = request.data.get('status')
+            task_status = request.data.get('status')
 
             if title:
                 task.title = title
@@ -148,22 +153,22 @@ def task_view(request, companyid=None, taskid=None):
                 task.description = description
             if due_date:
                 task.due_date = due_date
-            if status:
-                task.status = status
-
-            task.assigned_to.set(assigned_to)
+            if task_status:
+                task.status = task_status
             task.save()
 
             task_data = TaskSerializer(task).data
-            return Response({'detail': 'Task updated', 'task': task_data}, status=status.HTTP_200_OK)
-        except ObjectDoesNotExist:
+            return Response({'detail': 'Task updated', 'task': task_data}, status=200)
+        except ObjectDoesNotExist as e:
+            print(e)
             return Response({'detail': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
+            print(e)
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
     elif request.method == 'DELETE':
         try:
-            task_id = request.data.get('task_id')
+            task_id = taskid
             task = Task.objects.get(id=task_id, company__id=companyid)
             task.delete()
             return Response({'detail': 'Task deleted'}, status=status.HTTP_204_NO_CONTENT)
@@ -172,13 +177,13 @@ def task_view(request, companyid=None, taskid=None):
         except Exception as e:
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
-@api_view(['POST', 'GET'])
+@api_view(['POST', 'GET', 'DELETE'])
 @permission_classes([IsAuthenticated])
-def company_user_view(request, companyid=None):
+def company_user_view(request, companyid=None, userid=None):
     if request.method == 'GET':
         try:
-            company_users = CompanyUser.objects.filter(company__id=companyid)
-            users_data = CompanyUserSerializer(company_users, many=True).data
+            company = Company.objects.get(id=companyid)
+            users_data = CustomUserSerializer(company.users.all(), many=True).data
             return Response({'detail': 'Company users fetched', 'users': users_data}, status=status.HTTP_200_OK)
         except ObjectDoesNotExist:
             return Response({'detail': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -187,11 +192,28 @@ def company_user_view(request, companyid=None):
         try:
             user = User.objects.get(id=request.data.get('user_id'))
             company = Company.objects.get(id=companyid)
-            role = request.data.get('role', 'USER')
+            
+            company.users.add(user)
 
-            company_user = CompanyUser.objects.create(user=user, company=company, role=role)
-            user_data = CompanyUserSerializer(company_user).data
-            return Response({'detail': 'User assigned to company', 'user': user_data}, status=status.HTTP_201_CREATED)
+            users_data = CustomUserSerializer(company.users.all(), many=True).data
+            return Response({'detail': 'User added to company', 'users': users_data}, status=status.HTTP_201_CREATED)
+        except ObjectDoesNotExist:
+            return Response({'detail': 'Company or User not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+    elif request.method == 'DELETE':
+        try:
+            user = User.objects.get(id=userid)
+            company = Company.objects.get(id=companyid)
+
+            if company.admin == user:
+                return Response({'detail': 'Cannot remove the admin from the company'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            company.users.remove(user)
+
+            users_data = CustomUserSerializer(company.users.all(), many=True).data
+            return Response({'detail': 'User removed from company', 'users': users_data}, status=status.HTTP_204_NO_CONTENT)
         except ObjectDoesNotExist:
             return Response({'detail': 'Company or User not found'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
@@ -239,7 +261,7 @@ def notification_view(request, userid, notificationid=None):
     if request.method == 'GET':
         if notificationid:
             try:
-                notification = Notification.objects.get(id=notificationid, user__id=userid)
+                notification = Notification.objects.prefetch_related('company').get(id=notificationid, user__id=userid)
                 notification_data = NotificationSerializer(notification).data
                 return Response({'detail': 'Notification fetched', 'notification': notification_data}, status=status.HTTP_200_OK)
             except Notification.DoesNotExist:
@@ -265,6 +287,7 @@ def notification_view(request, userid, notificationid=None):
         except ObjectDoesNotExist:
             return Response({'detail': 'User, Company, or Task not found'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
+            print(e)
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     elif request.method == 'DELETE':
@@ -285,26 +308,20 @@ def get_user_companies(request):
 
     user = request.user
 
-    admin_companies = Company.objects.filter(admin=user)
+    admin_companies = Company.objects.filter(admin=user).first()
 
-    user_companies = CompanyUser.objects.filter(user=user)
+    user_companies = Company.objects.filter(users=user).first()
 
     user_info = {
         'companies': [],
         'detail': ''
     }
 
-    if admin_companies.exists():
-        user_info['companies'] = [{
-            'company_id': company.id,
-            'company_name': company.name
-        } for company in admin_companies]
+    if admin_companies:
+        user_info['companies'] = CompanySerializer(admin_companies).data
         user_info['detail'] = 'Admin, User companies found'
-    elif user_companies.exists():
-        companies = [{
-            'company_id': company.company.id,
-            'company_name': company.company.name  
-        } for company in user_companies]
+    elif user_companies:
+        companies = CompanySerializer(user_companies).data
         user_info['companies'] = companies
         user_info['detail'] = 'Employee, User companies found'
     else:
@@ -312,3 +329,59 @@ def get_user_companies(request):
         user_info['detail'] = 'No companies found for the user'
 
     return Response(user_info, status=status.HTTP_200_OK)
+
+@api_view(['GET'])
+def get_tasks_assigned_to_user(request, userid):
+    tasks = Task.objects.filter(assigned_to=userid)
+    if tasks.exists():
+        serializer = TaskSerializer(tasks, many=True)
+        return Response(serializer.data)
+    return Response({"error": "No tasks found for this user."}, status=status.HTTP_204_NO_CONTENT)
+
+@api_view(['POST', 'DELETE'])
+def Accept_or_decline_invite(request, userid=None, companyid=None):
+    if request.method == 'POST':
+        if not companyid:
+            return Response({'detail': 'Company ID must be provided'}, status=status.HTTP_404_NOT_FOUND)
+        elif not userid:
+            return Response({'detail': 'User ID must be provided'}, status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            user = User.objects.get(id=userid)
+            company = Company.objects.get(id=companyid)
+        except User.DoesNotExist:
+            return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Company.DoesNotExist:
+            return Response({'detail': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        other_invite_notifications = Notification.objects.filter(user=userid)
+        other_invite_notifications.delete()
+
+        company.users.add(user)
+        company.invited_users.remove(user)
+
+        return Response({'detail': 'User added to the company'}, status=status.HTTP_200_OK)
+
+    elif request.method == 'DELETE':
+        if not companyid:
+            return Response({'detail': 'Company ID must be provided'}, status=status.HTTP_404_NOT_FOUND)
+        elif not userid:
+            return Response({'detail': 'User ID must be provided'}, status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            user = User.objects.get(id=userid)
+            company = Company.objects.get(id=companyid)
+        except User.DoesNotExist:
+            return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Company.DoesNotExist:
+            return Response({'detail': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        company.invited_users.remove(user)
+        company_notification = Notification.objects.create(
+            user=company.admin.id, 
+            message=f'User: {user.username} declined offer to join'
+        )
+
+        return Response({'detail': 'Company offer declined'}, status=status.HTTP_200_OK)
+    
+    
