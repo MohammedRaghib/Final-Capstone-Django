@@ -110,7 +110,8 @@ logger = logging.getLogger(__name__)
 def get_all_users(request):
     try:
         search_query = request.query_params.get('search', '')
-
+        users = User.objects.all()
+        
         if search_query:
             users = User.objects.filter(
                 Q(username__icontains=search_query) |
@@ -118,8 +119,9 @@ def get_all_users(request):
                 Q(first_name__icontains=search_query) |
                 Q(last_name__icontains=search_query)
             )
-        else:
-            users = User.objects.all()
+        
+        users = users.exclude(company__admin__isnull=False)
+        users = users.exclude(users__isnull=False).distinct()
 
         serialized = CustomUserSerializer(users, many=True).data
         return Response(

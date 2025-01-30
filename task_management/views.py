@@ -327,6 +327,7 @@ def get_user_companies(request):
     else:
         user_info['companies'] = []
         user_info['detail'] = 'No companies found for the user'
+        # return Response(status=status.HTTP_204_NO_CONTENT)
 
     return Response(user_info, status=status.HTTP_200_OK)
 
@@ -376,9 +377,12 @@ def Accept_or_decline_invite(request, userid=None, companyid=None):
         except Company.DoesNotExist:
             return Response({'detail': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
 
+        invite_notification = Notification.objects.filter(user=user, company=company).first()
+        if invite_notification:
+            invite_notification.delete()
         company.invited_users.remove(user)
         company_notification = Notification.objects.create(
-            user=company.admin.id, 
+            user=company.admin, 
             message=f'User: {user.username} declined offer to join'
         )
 
