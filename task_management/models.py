@@ -22,6 +22,8 @@ class Company(models.Model):
             return True
         return self.get_user_count() <= 50
     
+    def get_admin_email(self):
+        return self.admin.email
     
 def default_due_date():
     return datetime.now() + timedelta(days=30)

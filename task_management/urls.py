@@ -23,6 +23,8 @@ urlpatterns = [
     path('tasks/<int:taskid>/comments/', views.comment_view, name='comment_list_create'),  # Comment GET, POST 
     path('tasks/<int:taskid>/comments/<int:commentid>/', views.comment_view, name='comment_detail_delete'),  # Comment PUT, DELETE
 
+    # Admin
+    path('overalladmin/allcompanies/', views.fetch_data, name='fetch_data'), # Get all company objects for overall admin
     # Notification
     path('notifications/<int:userid>/', views.notification_view, name='notification_list_create'),  # Notification GET, POST 
     path('notifications/<int:userid>/<int:notificationid>/', views.notification_view, name='notification_detail_delete'),  #Notification PUT, DELETE

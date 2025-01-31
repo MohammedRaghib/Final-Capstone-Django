@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from rest_framework import status
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from datetime import datetime, timedelta
+from .utils import fetch_all_data
 from .models import (
     Company,
     Task,
@@ -17,6 +18,7 @@ from .serializers import (
     CommentSerializer,
     TaskSerializer,
     NotificationSerializer,
+    OverallAdminCompanySerializer
 )
 from custom_user_model.serializer import CustomUserSerializer
 User = get_user_model()
@@ -387,5 +389,30 @@ def Accept_or_decline_invite(request, userid=None, companyid=None):
         )
 
         return Response({'detail': 'Company offer declined'}, status=status.HTTP_200_OK)
-    
-    
+
+@api_view(['GET'])
+def fetch_data(request):
+    if request.method == 'GET':
+        try:
+            companies = Company.objects.all()
+            all_companies_data = []
+
+            for company in companies:
+                company_tasks = company.tasks.prefetch_related('assigned_to').all()
+                company_notifications = company.company.all()
+                company_users = company.users.all()
+                all_users = User.objects.exclude(id__in=company_users).exclude(id=company.admin.id)
+
+                company_data = CompanySerializer(company).data
+                company_data['tasks'] = TaskSerializer(company_tasks, many=True).data
+                company_data['noncompanyusers'] = CustomUserSerializer(all_users, many=True).data
+                company_data['notifications'] = NotificationSerializer(company_notifications, many=True).data
+                company_data['admin_name'] = company.get_admin_email()
+
+                all_companies_data.append(company_data)
+
+            return Response(all_companies_data, status=status.HTTP_200_OK)
+        except ObjectDoesNotExist:
+            return Response({'detail': 'No company found'}, status=status.HTTP_404_NOT_FOUND)
+        except ValidationError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
