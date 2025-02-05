@@ -70,6 +70,8 @@ def company_view(request, companyid=None):
                 admin = request.user
                 company = Company.objects.create(name=name, admin=admin)
                 company_data = CompanySerializer(company).data
+                all_notifications = Notification.objects.filter(user=admin)
+                all_notifications.delete()
                 return Response({'detail': 'Organization created', 'company': company_data}, status=status.HTTP_201_CREATED)
             except Exception as e:
                 return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -240,7 +242,7 @@ def company_user_view(request, companyid=None, userid=None):
 
             for task in tasks:
                 task.assigned_to.remove(user)
-            notification_removed_user = Notification.objects.create(user=company.admin, message=f'{user.username} left or was removed from company')
+            notification_removed_user = Notification.objects.create(user=company.admin,company=company, message=f'{user.username} left or was removed from company')
 
             users_data = CustomUserSerializer(company.users.all(), many=True).data
             return Response({'detail': 'User removed from company', 'users': users_data}, status=status.HTTP_204_NO_CONTENT)
@@ -499,15 +501,24 @@ def edit_profile(request, userid):
     else:
         return Response({'detail': 'Invalid request method'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
-@api_view(["POST"])
+@api_view(["POST", "DELETE"])
 def create_personal_system(request, userid):
     if not userid:
-        return Response({'detail': 'User ID is required'}, status=status.HTTP_400_BAD_REQUEST)
-
-    try:
-        user = User.objects.get(id=userid)
-        user.personal = True
-        user.save()
-        return Response({'detail': 'User updated successfully'}, status=status.HTTP_200_OK)
-    except ObjectDoesNotExist:
-        return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'detail': 'User ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+    if request.method == 'POST':
+        try:
+            user = User.objects.get(id=userid)
+            user.personal = True
+            user.save()
+            return Response({'detail': 'User updated successfully'}, status=status.HTTP_200_OK)
+        except ObjectDoesNotExist:
+            return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+    elif request.method == 'DELETE':
+        try:
+            user = User.objects.get(id=userid)
+            user.personal = False
+            user.save()
+            return Response({'detail': 'User updated successfully'}, status=status.HTTP_200_OK)
+        except ObjectDoesNotExist:
+            return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
