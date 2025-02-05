@@ -27,7 +27,7 @@ class NotificationSerializer(serializers.ModelSerializer):
     company = CompanySerializer()
     class Meta:
         model = Notification
-        fields = ['user', 'company', 'task', 'message', 'is_read', 'created_at']
+        fields = ['id', 'user', 'company', 'company_name','task', 'message', 'is_read', 'created_at']
 
 class OverallAdminCompanySerializer(serializers.ModelSerializer):
     tasks = TaskSerializer(many=True)

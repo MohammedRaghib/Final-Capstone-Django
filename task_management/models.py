@@ -54,7 +54,8 @@ class Comment(models.Model):
         return f"{self.user.username} - {self.task.title}"
     
 class Notification(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True)
+    company_name=models.CharField(max_length=100, null=True, blank=True)
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='company', null=True)
     task = models.ForeignKey(Task, on_delete=models.CASCADE, null=True, blank=True)
     message = models.TextField()

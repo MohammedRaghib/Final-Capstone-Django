@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from rest_framework import status
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from datetime import datetime, timedelta
-from .utils import fetch_all_data
+import time
 from .models import (
     Company,
     Task,
@@ -33,9 +33,18 @@ def company_view(request, companyid=None):
         try:
             company = Company.objects.get(id=companyid)
             company_tasks = company.tasks.prefetch_related('assigned_to').all()
+            current_date = datetime.now().date()
+            for task in company_tasks:
+                if task.due_date == current_date + timedelta(days=+1):
+                    notifcation = Notification.objects.filter(task=task.id)
+                    if notifcation:
+                        pass
+                    else:
+                        Notification.objects.create(company=companyid, message=f'{task.title} is due in one day')
             company_notifications = company.company.all()
             company_users = company.users.all()
-            all_users = User.objects.exclude(id__in=company_users).exclude(id=company.admin.id)
+            invited_users = company.invited_users.all()
+            all_users = User.objects.exclude(id__in=company_users).exclude(id__in=invited_users).exclude(id=company.admin.id)
 
             company_data = CompanySerializer(company).data
             company_data['tasks'] = TaskSerializer(company_tasks, many=True).data
@@ -127,6 +136,20 @@ def task_view(request, companyid=None, taskid=None):
                 due_date=due_date or default_due_date()
             )
             task.assigned_to.add(*assigned_to)
+            print(assigned_to)
+            for assignee in assigned_to:
+                print(f"Assigning to: {assignee}")
+                if assignee:
+                    try:
+                        notification_user = Notification.objects.create(
+                            user=assignee, 
+                            message=f'You have been assigned the task "{task.title}"'
+                        )
+                        print(f"Notification created for user: {assignee}")
+                    except Exception as e:
+                        print(f"Error creating notification for user {assignee}: {e}")
+                else:
+                    print('No valid assignee found')
 
             task_data = TaskSerializer(task).data
             return Response({'detail': 'Task created', 'task': task_data}, status=status.HTTP_201_CREATED)
@@ -213,6 +236,11 @@ def company_user_view(request, companyid=None, userid=None):
                 return Response({'detail': 'Cannot remove the admin from the company'}, status=status.HTTP_400_BAD_REQUEST)
             
             company.users.remove(user)
+            tasks = Task.objects.filter(assigned_to=user)
+
+            for task in tasks:
+                task.assigned_to.remove(user)
+            notification_removed_user = Notification.objects.create(user=company.admin, message=f'{user.username} left or was removed from company')
 
             users_data = CustomUserSerializer(company.users.all(), many=True).data
             return Response({'detail': 'User removed from company', 'users': users_data}, status=status.HTTP_204_NO_CONTENT)
@@ -283,7 +311,10 @@ def notification_view(request, userid, notificationid=None):
             company = Company.objects.get(id=company_id) if company_id else None
             task = Task.objects.get(id=task_id) if task_id else None
 
-            notification = Notification.objects.create(user=user, company=company, task=task, message=message)
+            notification = Notification.objects.create(user=user, task=task, message=message, company= company)
+            if message == 'Invite' and company:
+                company.invited_users.add(user)
+            
             notification_data = NotificationSerializer(notification).data
             return Response({'detail': 'Notification created', 'notification': notification_data}, status=status.HTTP_201_CREATED)
         except ObjectDoesNotExist:
@@ -294,8 +325,7 @@ def notification_view(request, userid, notificationid=None):
 
     elif request.method == 'DELETE':
         try:
-            notification_id = request.data.get('notification_id')
-            notification = Notification.objects.get(id=notification_id, user__id=userid)
+            notification = Notification.objects.get(id=notificationid, user__id=userid)
             notification.delete()
             return Response({'detail': 'Notification deleted'}, status=status.HTTP_204_NO_CONTENT)
         except ObjectDoesNotExist:
@@ -362,6 +392,11 @@ def Accept_or_decline_invite(request, userid=None, companyid=None):
 
         company.users.add(user)
         company.invited_users.remove(user)
+        company_notification = Notification.objects.create(
+            company=company,
+            user=company.admin, 
+            message=f'User: {user.username} approved offer to join'
+        )
 
         return Response({'detail': 'User added to the company'}, status=status.HTTP_200_OK)
 
@@ -384,6 +419,7 @@ def Accept_or_decline_invite(request, userid=None, companyid=None):
             invite_notification.delete()
         company.invited_users.remove(user)
         company_notification = Notification.objects.create(
+            company=company,
             user=company.admin, 
             message=f'User: {user.username} declined offer to join'
         )
@@ -399,6 +435,14 @@ def fetch_data(request):
 
             for company in companies:
                 company_tasks = company.tasks.prefetch_related('assigned_to').all()
+                current_date = datetime.now().date()
+                for task in company_tasks:
+                    if task.due_date == current_date + timedelta(days=+1):
+                        notifcation = Notification.objects.filter(task=task.id)
+                        if notifcation:
+                            pass
+                        else:
+                            Notification.objects.create(company=company, user=company.admin, task=task,message=f'{task.title} is due in one day')
                 company_notifications = company.company.all()
                 company_users = company.users.all()
                 all_users = User.objects.exclude(id__in=company_users).exclude(id=company.admin.id)
@@ -416,3 +460,40 @@ def fetch_data(request):
             return Response({'detail': 'No company found'}, status=status.HTTP_404_NOT_FOUND)
         except ValidationError as e:
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+@api_view(['POST'])
+def edit_profile(request, userid):
+    if not userid:
+        return Response({'detail': 'User ID is required'}, status=status.HTTP_401_UNAUTHORIZED)
+    user = User.objects.get(id=userid)
+    if request.method == "POST":
+        email = request.data.get('email')
+        username = request.data.get('username')
+        first_name = request.data.get('first_name')
+        last_name = request.data.get('last_name')
+        profile_picture = request.FILES.get('profile_picture')
+        password = request.data.get('password')
+
+        if username:
+            user.username = username
+
+        if first_name:
+            user.first_name = first_name
+
+        if last_name:
+            user.last_name = last_name
+
+        if profile_picture:
+            user.profile_picture = profile_picture
+        
+        if email:
+            user.email = email
+
+        if password:
+            user.set_password(password)
+
+        user.save()
+        serialized = CustomUserSerializer(user).data
+        return Response({'detail': 'Profile updated successfully', 'user': serialized}, status=200)
+    else:
+        return Response({'detail': 'Invalid request method'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)

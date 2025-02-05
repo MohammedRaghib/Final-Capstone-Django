@@ -14,6 +14,7 @@ urlpatterns = [
     path('usercompanies/', views.get_user_companies, name='get_user_companies'),  # Getting company for request.user
     path('tasks/assignedto/<int:userid>/', views.get_tasks_assigned_to_user, name='tasks-assigned-to-user'), # Getting tasks assigned to user
     path('accept_or_decline_invite/<int:userid>/<int:companyid>/', views.Accept_or_decline_invite, name='accept_or_decline_invite'), # Accept or declining invite
+    path('edit_profile/<int:userid>/', views.edit_profile, name='edit_profile'), # Editing user profile
 
     # Tasks
     path('companies/<int:companyid>/tasks/', views.task_view, name='task_list_create'),  # Task GET, POST 
@@ -25,6 +26,7 @@ urlpatterns = [
 
     # Admin
     path('overalladmin/allcompanies/', views.fetch_data, name='fetch_data'), # Get all company objects for overall admin
+    
     # Notification
     path('notifications/<int:userid>/', views.notification_view, name='notification_list_create'),  # Notification GET, POST 
     path('notifications/<int:userid>/<int:notificationid>/', views.notification_view, name='notification_detail_delete'),  #Notification PUT, DELETE
