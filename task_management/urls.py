@@ -15,6 +15,7 @@ urlpatterns = [
     path('tasks/assignedto/<int:userid>/', views.get_tasks_assigned_to_user, name='tasks-assigned-to-user'), # Getting tasks assigned to user
     path('accept_or_decline_invite/<int:userid>/<int:companyid>/', views.Accept_or_decline_invite, name='accept_or_decline_invite'), # Accept or declining invite
     path('edit_profile/<int:userid>/', views.edit_profile, name='edit_profile'), # Editing user profile
+    path('create-personal/<int:userid>/', views.create_personal_system, name='create_personal_system'), # If creating a personal system then updates user profile
 
     # Tasks
     path('companies/<int:companyid>/tasks/', views.task_view, name='task_list_create'),  # Task GET, POST 

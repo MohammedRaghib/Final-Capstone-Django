@@ -25,6 +25,9 @@ class Company(models.Model):
     def get_admin_email(self):
         return self.admin.email
     
+    def is_personal(self):
+        return self.admin.personal
+    
 def default_due_date():
     return datetime.now() + timedelta(days=30)
 

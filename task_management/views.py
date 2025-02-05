@@ -452,6 +452,7 @@ def fetch_data(request):
                 company_data['noncompanyusers'] = CustomUserSerializer(all_users, many=True).data
                 company_data['notifications'] = NotificationSerializer(company_notifications, many=True).data
                 company_data['admin_name'] = company.get_admin_email()
+                company_data['personal'] = company.is_personal()
 
                 all_companies_data.append(company_data)
 
@@ -497,3 +498,16 @@ def edit_profile(request, userid):
         return Response({'detail': 'Profile updated successfully', 'user': serialized}, status=200)
     else:
         return Response({'detail': 'Invalid request method'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+@api_view(["POST"])
+def create_personal_system(request, userid):
+    if not userid:
+        return Response({'detail': 'User ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = User.objects.get(id=userid)
+        user.personal = True
+        user.save()
+        return Response({'detail': 'User updated successfully'}, status=status.HTTP_200_OK)
+    except ObjectDoesNotExist:
+        return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
