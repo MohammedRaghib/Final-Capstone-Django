@@ -35,7 +35,7 @@ def company_view(request, companyid=None):
             company_tasks = company.tasks.prefetch_related('assigned_to').all()
             current_date = datetime.now().date()
             for task in company_tasks:
-                if task.due_date == current_date + timedelta(days=+1):
+                if task.due_date == current_date + timedelta(days=+1) and task.status != 'DONE':
                     notifcation = Notification.objects.filter(task=task.id)
                     if notifcation:
                         pass
