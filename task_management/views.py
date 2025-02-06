@@ -454,7 +454,6 @@ def fetch_data(request):
                 company_data['noncompanyusers'] = CustomUserSerializer(all_users, many=True).data
                 company_data['notifications'] = NotificationSerializer(company_notifications, many=True).data
                 company_data['admin_name'] = company.get_admin_email()
-                company_data['personal'] = company.is_personal()
 
                 all_companies_data.append(company_data)
 
@@ -506,19 +505,19 @@ def create_personal_system(request, userid):
     if not userid:
             return Response({'detail': 'User ID is required'}, status=status.HTTP_400_BAD_REQUEST)
     if request.method == 'POST':
-        try:
-            user = User.objects.get(id=userid)
-            user.personal = True
-            user.save()
-            return Response({'detail': 'User updated successfully'}, status=status.HTTP_200_OK)
-        except ObjectDoesNotExist:
-            return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-        
-    elif request.method == 'DELETE':
-        try:
-            user = User.objects.get(id=userid)
-            user.personal = False
-            user.save()
-            return Response({'detail': 'User updated successfully'}, status=status.HTTP_200_OK)
-        except ObjectDoesNotExist:
-            return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        if not request.data.get('name'):
+            return Response({'detail': 'Company name is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if Company.objects.filter(name=request.data.get('name')).exists():
+            return Response({'detail': 'Organization already exists'}, status=status.HTTP_409_CONFLICT)
+        else:
+            try:
+                name = request.data.get('name')
+                admin = request.user
+                company = Company.objects.create(name=name, admin=admin, personal=True)
+                company_data = CompanySerializer(company).data
+                all_notifications = Notification.objects.filter(user=admin)
+                all_notifications.delete()
+                return Response({'detail': 'Organization created', 'company': company_data}, status=status.HTTP_201_CREATED)
+            except Exception as e:
+                return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

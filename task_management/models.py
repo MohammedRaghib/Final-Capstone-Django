@@ -7,6 +7,7 @@ class Company(models.Model):
     name = models.CharField(max_length=255)
     plan = models.BooleanField(default=False)
     admin = models.ForeignKey(User, on_delete=models.CASCADE)
+    personal = models.BooleanField(default=False)
     payment_due_date = models.DateField(null=True, blank=True) 
     users = models.ManyToManyField(User, related_name='users', blank=True)
     invited_users = models.ManyToManyField(User, related_name='invitedusers', blank=True)
