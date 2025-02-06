@@ -2,6 +2,9 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    # Home Page
+    path('', views.home, name='home'),
+    
     # Company
     path('companies/', views.company_view, name='company_list_create'),  # Company GET, POST
     path('companies/<int:companyid>/', views.company_view, name='company_detail_update_delete'),  # Company PUT, DELETE
