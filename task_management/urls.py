@@ -4,7 +4,17 @@ from . import views
 urlpatterns = [
     # Home Page
     path('', views.home, name='home'),
-    
+
+    # Category
+    path('categories/', views.category_view, name='category_list_create'),  # Category GET, POST
+    path('categories/<int:categoryid>/', views.category_view, name='category_detail_update_delete'),  # Category PUT, DELETE
+
+    # Personal
+    path('create-personal/<int:userid>/', views.create_personal_system, name='create_personal_system'), # If creating a personal system then updates user profile
+
+    path('personal/<int:personalid>/tasks/', views.personal_task_view, name='personal_task_list_create'),  # Personal Task GET, POST 
+    path('personal/<int:personalid>/tasks/<int:taskid>/', views.personal_task_view, name='personal_task_detail_update_delete'),  # Personal Task PUT, DELETE
+
     # Company
     path('companies/', views.company_view, name='company_list_create'),  # Company GET, POST
     path('companies/<int:companyid>/', views.company_view, name='company_detail_update_delete'),  # Company PUT, DELETE
@@ -30,7 +40,10 @@ urlpatterns = [
 
     # Admin
     path('overalladmin/allcompanies/', views.fetch_data, name='fetch_data'), # Get all company objects for overall admin
-    
+    path('getusersforadmin/', views.get_users_for_admin, name='get_users_for_admin'), # Get all filtered user objects for overall admin
+    path('allunfilteredusers/', views.all_unfiltered_users, name='all_unfiltered_users_get'), # Get all unfiltered user objects for overall admin
+    path('allunfilteredusers/<int:userid>/', views.all_unfiltered_users, name='all_unfiltered_users_delete'), # Delete unfiltered user object for overall admin
+
     # Notification
     path('notifications/<int:userid>/', views.notification_view, name='notification_list_create'),  # Notification GET, POST 
     path('notifications/<int:userid>/<int:notificationid>/', views.notification_view, name='notification_detail_delete'),  #Notification PUT, DELETE

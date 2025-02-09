@@ -3,7 +3,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from django.db.models import Q
 from django.contrib.auth import get_user_model
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from rest_framework import status
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from datetime import datetime, timedelta
@@ -13,13 +13,17 @@ from .models import (
     Task,
     Notification,
     Comment,
+    Personal_Account,
+    Category
 )
 from .serializers import (
     CompanySerializer,
     CommentSerializer,
     TaskSerializer,
     NotificationSerializer,
-    OverallAdminCompanySerializer
+    OverallAdminCompanySerializer,
+    Personal_AccountSerializer,
+    CategorySerializer,
 )
 from custom_user_model.serializer import CustomUserSerializer
 User = get_user_model()
@@ -27,22 +31,36 @@ User = get_user_model()
 def default_due_date():
     return datetime.now() + timedelta(days=30)
 
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from datetime import datetime, timedelta
+
 @api_view(['POST', 'GET', 'PUT', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def company_view(request, companyid=None):
     if request.method == 'GET':
+        def create_notification(task, entity, entity_type):
+            if not Notification.objects.filter(task=task.id).exists():
+                message = f'{task.title} is due in one day'
+                if entity_type == 'company':
+                    Notification.objects.create(company=entity, message=message)
+                elif entity_type == 'personal':
+                    Notification.objects.create(personal=entity, message=message)
         try:
-            company = Company.objects.get(id=companyid)
+            company = Company.objects.filter(id=companyid).first()
+            if not company:
+                raise ObjectDoesNotExist("Company not found")
+
             company_tasks = company.tasks.prefetch_related('assigned_to').all()
             current_date = datetime.now().date()
+
             for task in company_tasks:
-                if task.due_date == current_date + timedelta(days=+1) and task.status != 'DONE':
-                    notifcation = Notification.objects.filter(task=task.id)
-                    if notifcation:
-                        pass
-                    else:
-                        Notification.objects.create(company=companyid, message=f'{task.title} is due in one day')
-            company_notifications = company.company.all()
+                if task.due_date == current_date + timedelta(days=1) and task.status != 'DONE':
+                    create_notification(task, companyid, 'company')
+
+            company_notifications = company.notifications.all()
             company_users = company.users.all()
             invited_users = company.invited_users.all()
             all_users = User.objects.exclude(id__in=company_users).exclude(id__in=invited_users).exclude(id=company.admin.id)
@@ -52,12 +70,33 @@ def company_view(request, companyid=None):
             company_data['noncompanyusers'] = CustomUserSerializer(all_users, many=True).data
             company_data['notifications'] = NotificationSerializer(company_notifications, many=True).data
             company_data['detail'] = 'Company details fetched'
+        except ObjectDoesNotExist as e:
+            print('No company found', e)
+            company_data = []
+        try:
+            personal = Personal_Account.objects.filter(admin=request.user).first()
+            current_date = datetime.now().date()
+            if personal:
+                personal_tasks = personal.personal_tasks.all()
+                for task in personal_tasks:
+                    if task.due_date == current_date + timedelta(days=1) and task.status != 'DONE':
+                        create_notification(task, personal, 'personal')
 
-            return Response(company_data, status=status.HTTP_200_OK)
-        except ObjectDoesNotExist:
+                personal_data = {
+                    "id": personal.id,
+                    "name": personal.name,
+                    "admin": CustomUserSerializer(personal.admin).data,
+                    "tasks": TaskSerializer(personal_tasks, many=True).data,
+                    'detail': 'Personal account found'
+                }
+            else:
+                personal_data = {'detail': 'No personal account found'}
+        except ObjectDoesNotExist as e:
+            print('No company or personal found', e)
             return Response({'detail': 'No company found'}, status=status.HTTP_404_NOT_FOUND)
         except ValidationError as e:
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"company": company_data, "personal": personal_data}, status=status.HTTP_200_OK)
 
     elif request.method == 'POST':
         if not request.data.get('name'):
@@ -68,7 +107,11 @@ def company_view(request, companyid=None):
         else:
             try:
                 name = request.data.get('name')
-                admin = request.user
+                admin_id = request.data.get('admin')
+                if admin_id:
+                    admin = User.objects.get(id=admin_id)
+                else:
+                    admin = request.user
                 company = Company.objects.create(name=name, admin=admin)
                 company_data = CompanySerializer(company).data
                 all_notifications = Notification.objects.filter(user=admin)
@@ -309,12 +352,18 @@ def notification_view(request, userid, notificationid=None):
             user = User.objects.get(id=userid)
             message = request.data.get('message')
             company_id = request.data.get('company_id')
+            personal_id = request.data.get('personal_id')
             task_id = request.data.get('task_id')
 
             company = Company.objects.get(id=company_id) if company_id else None
+            personal = Personal_Account.objects.get(id=personal_id) if personal_id else None
             task = Task.objects.get(id=task_id) if task_id else None
-
-            notification = Notification.objects.create(user=user, task=task, message=message, company= company)
+            if company and task:
+                notification = Notification.objects.create(user=user, task=task, message=message, company= company)
+            elif personal and task:
+                notification = Notification.objects.create(user=user, task=task, message=message)
+            else:
+                notification = Notification.objects.create(user=user, message=message)
             if message == 'Invite' and company:
                 company.invited_users.add(user)
             
@@ -338,33 +387,44 @@ def notification_view(request, userid, notificationid=None):
 
 @api_view(['GET'])
 def get_user_companies(request):
-    if not request.user.is_authenticated:
-        return Response({'detail': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
+    try:
+        if not request.user.is_authenticated:
+            return Response({'detail': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
 
-    user = request.user
+        user = request.user
 
-    admin_companies = Company.objects.filter(admin=user).first()
+        admin_companies = Company.objects.filter(admin=user).first()
 
-    user_companies = Company.objects.filter(users=user).first()
+        user_companies = Company.objects.filter(users=user).first()
 
-    user_info = {
-        'companies': [],
-        'detail': ''
-    }
+        personal_company = Personal_Account.objects.filter(admin=user).first()
 
-    if admin_companies:
-        user_info['companies'] = CompanySerializer(admin_companies).data
-        user_info['detail'] = 'Admin, User companies found'
-    elif user_companies:
-        companies = CompanySerializer(user_companies).data
-        user_info['companies'] = companies
-        user_info['detail'] = 'Employee, User companies found'
-    else:
-        user_info['companies'] = []
-        user_info['detail'] = 'No companies found for the user'
-        # return Response(status=status.HTTP_204_NO_CONTENT)
+        user_info = {
+            'company': [],
+            'detail': '',
+            'personal': [],
+        }
 
-    return Response(user_info, status=status.HTTP_200_OK)
+        if admin_companies:
+            user_info['company'] = CompanySerializer(admin_companies).data
+            user_info['detail'] = 'Admin, User companies found'
+        elif user_companies:
+            companies = CompanySerializer(user_companies).data
+            user_info['company'] = companies
+            user_info['detail'] = 'Employee, User companies found'
+        else:
+            user_info['company'] = []
+            user_info['detail'] = 'No companies found for the user'
+            # return Response(status=status.HTTP_204_NO_CONTENT)
+
+        if personal_company:
+            personal = Personal_AccountSerializer(personal_company).data
+            user_info['personal'] = personal
+
+        return Response(user_info, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(f"Error fetching user companies: {e}")
+        return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
 def get_tasks_assigned_to_user(request, userid):
@@ -434,21 +494,22 @@ def fetch_data(request):
     if request.method == 'GET':
         try:
             companies = Company.objects.all()
+            personal_accounts = Personal_Account.objects.all()
+            all_personal_accounts = []
             all_companies_data = []
 
             for company in companies:
                 company_tasks = company.tasks.prefetch_related('assigned_to').all()
                 current_date = datetime.now().date()
                 for task in company_tasks:
-                    if task.due_date == current_date + timedelta(days=+1):
-                        notifcation = Notification.objects.filter(task=task.id)
-                        if notifcation:
-                            pass
-                        else:
-                            Notification.objects.create(company=company, user=company.admin, task=task,message=f'{task.title} is due in one day')
-                company_notifications = company.company.all()
-                company_users = company.users.all()
-                all_users = User.objects.exclude(id__in=company_users).exclude(id=company.admin.id)
+                    if task.due_date == current_date + timedelta(days=1) and task.status != 'DONE':
+                        notification = Notification.objects.filter(task=task.id)
+                        if not notification:
+                            Notification.objects.create(company=company, user=company.admin, task=task, message=f'{task.title} is due in one day')
+
+                company_notifications = company.notifications.all()
+                all_company_users = company.users.all()
+                all_users = User.objects.exclude(id__in=all_company_users).exclude(id=company.admin.id)
 
                 company_data = CompanySerializer(company).data
                 company_data['tasks'] = TaskSerializer(company_tasks, many=True).data
@@ -458,11 +519,23 @@ def fetch_data(request):
 
                 all_companies_data.append(company_data)
 
-            return Response(all_companies_data, status=status.HTTP_200_OK)
+            for personal in personal_accounts:
+                if personal:
+                    personal_tasks = personal.personal_tasks.all() or []
+                    personal_data = {
+                        "id": personal.id,
+                        "name": personal.name,
+                        "admin": CustomUserSerializer(personal.admin).data,
+                        "tasks": TaskSerializer(personal_tasks, many=True).data
+                    }
+                    all_personal_accounts.append(personal_data)
+
+            return Response({"companies": all_companies_data, "personals": all_personal_accounts}, status=status.HTTP_200_OK)
         except ObjectDoesNotExist:
-            return Response({'detail': 'No company found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'detail': 'No company or personal account found'}, status=status.HTTP_404_NOT_FOUND)
         except ValidationError as e:
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
         
 @api_view(['POST'])
 def edit_profile(request, userid):
@@ -507,21 +580,269 @@ def create_personal_system(request, userid):
             return Response({'detail': 'User ID is required'}, status=status.HTTP_400_BAD_REQUEST)
     if request.method == 'POST':
         if not request.data.get('name'):
-            return Response({'detail': 'Company name is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Account name is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if Company.objects.filter(name=request.data.get('name')).exists():
-            return Response({'detail': 'Organization already exists'}, status=status.HTTP_409_CONFLICT)
+        if Personal_Account.objects.filter(name=request.data.get('name')).exists():
+            return Response({'detail': 'Personal account already exists'}, status=status.HTTP_409_CONFLICT)
         else:
             try:
                 name = request.data.get('name')
-                admin = request.user
-                company = Company.objects.create(name=name, admin=admin, personal=True)
-                company_data = CompanySerializer(company).data
-                all_notifications = Notification.objects.filter(user=admin)
-                all_notifications.delete()
-                return Response({'detail': 'Organization created', 'company': company_data}, status=status.HTTP_201_CREATED)
+                admin_id = request.data.get('admin')
+                if admin_id:
+                    admin = User.objects.get(id=admin_id)
+                else:
+                    admin = request.user
+                personal_account = Personal_Account.objects.create(name=name, admin=admin)
+                personal_account = Personal_AccountSerializer(personal_account).data
+                return Response({'detail': 'Personal account created', 'personal': personal_account}, status=status.HTTP_201_CREATED)
             except Exception as e:
                 return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
+    elif request.method == 'DELETE':
+        try:
+            personal_account = Personal_Account.objects.get(admin__id=userid)
+            personal_account.delete()
+            return Response({'detail': 'Personal account deleted'}, status=status.HTTP_204_NO_CONTENT)
+        except Personal_Account.DoesNotExist:
+            return Response({'detail': 'Personal account not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET', 'POST', 'PUT', 'DELETE'])
+def personal_task_view(request, personalid=None, taskid=None):
+    if request.method == 'GET':
+        if taskid: 
+            try:
+                task = Task.objects.prefetch_related('comments').get(id=taskid, personal__id=personalid)
+                task_data = TaskSerializer(task).data
+                return Response({'detail': 'Task fetched', 'task': task_data}, status=status.HTTP_200_OK)
+            except Task.DoesNotExist:
+                return Response({'detail': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+        else:  
+            try:
+                tasks = Task.objects.filter(personal__id=personalid)
+                tasks_data = TaskSerializer(tasks, many=True).data
+                return Response({'detail': 'Tasks fetched', 'tasks': tasks_data}, status=status.HTTP_200_OK)
+            except Personal_Account.DoesNotExist:
+                return Response({'detail': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    elif request.method == 'POST':
+        try:
+            title = request.data.get('title')
+            description = request.data.get('description')
+            category_id = request.data.get('category')
+            if category_id:
+                print(category_id)
+            else:
+                print('No ID')
+            category = Category.objects.get(id=category_id)
+
+            personal = Personal_Account.objects.get(id=personalid)
+            due_date = request.data.get('due_date')
+
+            task = Task.objects.create(
+                title=title,
+                description=description,
+                created_by=request.user,
+                personal=personal,
+                category=category,
+                due_date=due_date or default_due_date()
+            )
+
+            task_data = TaskSerializer(task).data
+            return Response({'detail': 'Task created', 'task': task_data}, status=status.HTTP_201_CREATED)
+        except ObjectDoesNotExist:
+            return Response({'detail': 'Company or User not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print(e)
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            
+    elif request.method == 'PUT':
+        try:
+            task_id = taskid
+            task = Task.objects.get(id=task_id, personal__id=personalid)
+            title = request.data.get('title')
+            description = request.data.get('description')
+            category_id = request.data.get('category')
+            category = Category.objects.get(id=category_id) if category_id else None
+            due_date = request.data.get('due_date')
+            task_status = request.data.get('status')
+
+            if title:
+                task.title = title
+            if description:
+                task.description = description
+            if due_date:
+                task.due_date = due_date
+            if task_status:
+                task.status = task_status
+            if category: 
+                task.category = category
+            task.save()
+
+            task_data = TaskSerializer(task).data
+            return Response({'detail': 'Task updated', 'task': task_data}, status=200)
+        except ObjectDoesNotExist as e:
+            print(e)
+            return Response({'detail': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print(e)
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+    elif request.method == 'DELETE':
+        try:
+            task_id = taskid
+            task = Task.objects.get(id=task_id, personal__id=personalid)
+            task.delete()
+            return Response({'detail': 'Task deleted'}, status=status.HTTP_204_NO_CONTENT)
+        except ObjectDoesNotExist:
+            return Response({'detail': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET', 'POST', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def category_view(request, categoryid=None):
+    if request.method == 'GET':
+        if categoryid:
+            try:
+                category = Category.objects.get(id=categoryid)
+                category_data = {
+                    'id': category.id,
+                    'name': category.name,
+                    'personal': category.personal.id if category.personal else None
+                }
+                return Response({'detail': 'Category fetched', 'category': category_data}, status=status.HTTP_200_OK)
+            except Category.DoesNotExist:
+                return Response({'detail': 'Category not found'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            categories = Category.objects.all()
+            categories_data = [
+                {
+                    'id': category.id,
+                    'name': category.name,
+                    'personal': category.personal.id if category.personal else None
+                }
+                for category in categories
+            ]
+            return Response({'detail': 'Categories fetched', 'categories': categories_data}, status=status.HTTP_200_OK)
+
+    elif request.method == 'POST':
+        name = request.data.get('name')
+        personal_id = request.data.get('personal')
+        if not name:
+            return Response({'detail': 'Name is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            personal = Personal_Account.objects.get(id=personal_id) if personal_id else None
+            category = Category.objects.create(name=name, personal=personal)
+            category_data = {
+                'id': category.id,
+                'name': category.name,
+                'personal': category.personal.id if category.personal else None
+            }
+            return Response({'detail': 'Category created', 'category': category_data}, status=status.HTTP_201_CREATED)
+        except Personal_Account.DoesNotExist:
+            return Response({'detail': 'Personal account not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    elif request.method == 'PUT':
+        if not categoryid:
+            return Response({'detail': 'Category ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            category = Category.objects.get(id=categoryid)
+            name = request.data.get('name')
+            personal_id = request.data.get('personal')
+            if name:
+                category.name = name
+            if personal_id:
+                try:
+                    personal = Personal_Account.objects.get(id=personal_id)
+                    category.personal = personal
+                except Personal_Account.DoesNotExist:
+                    return Response({'detail': 'Personal account not found'}, status=status.HTTP_404_NOT_FOUND)
+            category.save()
+            category_data = {
+                'id': category.id,
+                'name': category.name,
+                'personal': category.personal.id if category.personal else None
+            }
+            return Response({'detail': 'Category updated', 'category': category_data}, status=status.HTTP_200_OK)
+        except Category.DoesNotExist:
+            return Response({'detail': 'Category not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    elif request.method == 'DELETE':
+        if not categoryid:
+            return Response({'detail': 'Category ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            category = Category.objects.get(id=categoryid)
+            category.delete()
+            return Response({'detail': 'Category deleted'}, status=status.HTTP_204_NO_CONTENT)
+        except Category.DoesNotExist:
+            return Response({'detail': 'Category not found'}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['GET'])
+def get_users_for_admin(request):
+    try:
+        search_query = request.query_params.get('search', '')
+        model = request.query_params.get('model')
+        if model == 'company':
+            users = User.objects.filter(company__isnull=True, is_superuser=False)
+        elif model == 'personal':
+            users = User.objects.filter(personal__isnull=True, is_superuser=False)
+        else:
+            users = User.objects.all()
+        
+        if search_query:
+            users = users.filter(
+                Q(username__icontains=search_query) |
+                Q(email__icontains=search_query) |
+                Q(first_name__icontains=search_query) |
+                Q(last_name__icontains=search_query)
+            )
+        
+
+        serialized = CustomUserSerializer(users, many=True).data
+        return Response(
+            {
+                'detail': 'Users fetched',
+                'all_users': serialized,
+            },
+            status=status.HTTP_200_OK
+        )
+    except Exception as e:
+        print(f"Error fetching users: {e}")
+        return Response(
+            {'detail': 'Error encountered', 'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    
+@api_view(['GET', "DELETE"])
+def all_unfiltered_users(request, userid=None):
+    if request.method == 'GET':
+        try:
+            users = User.objects.exclude(id=request.user.id)
+            serialized = CustomUserSerializer(users, many=True).data
+            return Response(
+                {
+                    'detail': 'All users fetched',
+                    'all_users': serialized,
+                },
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            return Response(
+                {'detail': 'Error encountered', 'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    if request.method == 'DELETE':
+        try:
+            user = get_object_or_404(User, id=userid)
+            if request.user or request.user.is_superuser:
+                user.delete()
+                return Response({'detail': 'User deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
+            else:
+                return Response({'detail': 'You do not have permission to delete this user'}, status=status.HTTP_403_FORBIDDEN)
+        except Exception as e:
+            return Response({'detail': 'Error encountered', 'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
 def home(request):
     return render(request, 'Home.html')
