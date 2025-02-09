@@ -630,25 +630,32 @@ def personal_task_view(request, personalid=None, taskid=None):
         try:
             title = request.data.get('title')
             description = request.data.get('description')
-            category_id = request.data.get('category')
-            if category_id:
-                print(category_id)
-            else:
-                print('No ID')
-            category = Category.objects.get(id=category_id)
+            category_id = request.data.get('category') or None
 
             personal = Personal_Account.objects.get(id=personalid)
             due_date = request.data.get('due_date')
+            if category_id:
+                print(category_id)
+                category = Category.objects.get(id=category_id)
 
-            task = Task.objects.create(
+                task = Task.objects.create(
                 title=title,
                 description=description,
                 created_by=request.user,
                 personal=personal,
                 category=category,
                 due_date=due_date or default_due_date()
-            )
-
+                )
+            else:
+                print('No category ID')
+                task = Task.objects.create(
+                title=title,
+                description=description,
+                created_by=request.user,
+                personal=personal,
+                due_date=due_date or default_due_date()
+                )
+            
             task_data = TaskSerializer(task).data
             return Response({'detail': 'Task created', 'task': task_data}, status=status.HTTP_201_CREATED)
         except ObjectDoesNotExist:
