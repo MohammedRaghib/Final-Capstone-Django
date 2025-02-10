@@ -4,41 +4,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="./../../media/prof_pics/A_majestic_and_cool_Minecraft_.jpeg">
     <title>TaskEase Backend | Home</title>
     <style>
+        :root {
+  --background-color: #121212;
+  --primary-color: #1f1f1f;
+  --secondary-color: #292929;
+  --accent-color: #bb86fc;
+  --text-color: #e0e0e0;
+  --link-color: #03dac6;
+  --border-color: #ffffff;
+}
         body {
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            background-color: blue;
+            background-color: var(--background-color);
+            color: var(--text-color);
         }
-        div{
-            background-color: aqua;
-            color: brown;
+        
+        .content {
+            background-color: var(--primary-color);
             text-align: center;
             padding: 10px;
             border-radius: 20px;
         }
+
         a {
             text-decoration: none;
             padding: 10px;
             border-radius: 20px;
+            color: var(--link-color);
         }
-        a:hover{
-            background-color: blue;
-            color: brown;
+
+        a:hover {
+            color: var(--accent-color);
         }
     </style>
 </head>
 
 <body>
-    <div>
-        <p>Hello This is a site for staff only!</p>
-        <p>If you are not then get out of here 😃</p>
-        <p>If you are navigate to the admin login page!</p>
-        <a href="/admin">Login</a>
+    <div class="container">
+        <div class="content">
+            <p>Hello This is a site for staff only!</p>
+            <p>If you are not then get out of here 😃</p>
+            <p>If you are navigate to the admin login page!</p>
+            <a href="/admin">Login</a>
+        </div>
     </div>
 </body>
 
