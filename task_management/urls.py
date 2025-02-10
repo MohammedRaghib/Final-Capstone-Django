@@ -6,8 +6,8 @@ urlpatterns = [
     path('', views.home, name='home'),
 
     # Category
-    path('categories/', views.category_view, name='category_list_create'),  # Category GET, POST
-    path('categories/<int:categoryid>/', views.category_view, name='category_detail_update_delete'),  # Category PUT, DELETE
+    path('categories/<int:personalid>/', views.category_view, name='category_list_create'),  # Category GET, POST
+    path('categories/<int:personalid>/<int:categoryid>/', views.category_view, name='category_detail_update_delete'),  # Category PUT, DELETE
 
     # Personal
     path('create-personal/<int:userid>/', views.create_personal_system, name='create_personal_system'), # If creating a personal system then updates user profile

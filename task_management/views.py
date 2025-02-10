@@ -709,7 +709,7 @@ def personal_task_view(request, personalid=None, taskid=None):
 
 @api_view(['GET', 'POST', 'PUT', 'DELETE'])
 @permission_classes([IsAuthenticated])
-def category_view(request, categoryid=None):
+def category_view(request, categoryid=None, personalid=None):
     if request.method == 'GET':
         if categoryid:
             try:
@@ -723,12 +723,13 @@ def category_view(request, categoryid=None):
             except Category.DoesNotExist:
                 return Response({'detail': 'Category not found'}, status=status.HTTP_404_NOT_FOUND)
         else:
-            categories = Category.objects.all()
+            personal = Personal_Account.objects.get(id=personalid)
+            categories = Category.objects.filter(personal=personal)
             categories_data = [
                 {
                     'id': category.id,
                     'name': category.name,
-                    'personal': category.personal.id if category.personal else None
+                    'personal': personalid if category.personal else None
                 }
                 for category in categories
             ]
@@ -740,7 +741,7 @@ def category_view(request, categoryid=None):
         if not name:
             return Response({'detail': 'Name is required'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            personal = Personal_Account.objects.get(id=personal_id) if personal_id else None
+            personal = Personal_Account.objects.get(id=personalid) if personal_id else None
             category = Category.objects.create(name=name, personal=personal)
             category_data = {
                 'id': category.id,
