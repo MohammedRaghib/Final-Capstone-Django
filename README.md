@@ -1,5 +1,3 @@
-I have gathered the necessary information to create a README file for your repository. Here's a draft based on the data collected:
-
 # Final Capstone Django
 
 ## Description
