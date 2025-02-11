@@ -569,7 +569,7 @@ def edit_profile(request, userid):
         return Response({'detail': 'Invalid request method'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 @api_view(["POST", "DELETE"])
-def create_personal_system(request, userid):
+def create_personal_system(request, userid, personalid=None):
     if not userid:
             return Response({'detail': 'User ID is required'}, status=status.HTTP_400_BAD_REQUEST)
     if request.method == 'POST':
@@ -594,7 +594,7 @@ def create_personal_system(request, userid):
             
     elif request.method == 'DELETE':
         try:
-            personal_account = Personal_Account.objects.get(admin__id=userid)
+            personal_account = Personal_Account.objects.get(id=personalid)
             personal_account.delete()
             return Response({'detail': 'Personal account deleted'}, status=status.HTTP_204_NO_CONTENT)
         except Personal_Account.DoesNotExist:

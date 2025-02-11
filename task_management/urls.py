@@ -11,6 +11,7 @@ urlpatterns = [
 
     # Personal
     path('create-personal/<int:userid>/', views.create_personal_system, name='create_personal_system'), # If creating a personal system then updates user profile
+    path('create-personal/<int:userid>/<int:personalid>/', views.create_personal_system, name='create_personal_system'), # If creating a personal system then updates user profile
 
     path('personal/<int:personalid>/tasks/', views.personal_task_view, name='personal_task_list_create'),  # Personal Task GET, POST 
     path('personal/<int:personalid>/tasks/<int:taskid>/', views.personal_task_view, name='personal_task_detail_update_delete'),  # Personal Task PUT, DELETE
