@@ -34,21 +34,6 @@ def login_view(request):
             'access': str(refresh.access_token),
             'user': CustomUserSerializer(user).data,
         }
-        # admin_companies = Company.objects.filter(admin=user)
-        # user_companies = Company.objects.filter(companyuser__user=user) or None
-
-        # if admin_companies.exists():
-        #     all_companies = admin_companies
-        #     user_info['companies'] = CompanySerializer(all_companies, many=True).data
-        #     user_info['detail'] = 'Admin, User companies found'
-        # elif user_companies.exists():
-        #     all_companies = user_companies
-        #     user_info['companies'] = CompanySerializer(all_companies, many=True).data
-        #     user_info['detail'] = 'Employee, User companies found'
-        # else:
-        #     user_info['companies'] = []
-        #     user_info['detail'] = 'No companies found for the user'
-
         return Response(user_info, status=status.HTTP_200_OK)
     else:
         return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -75,8 +60,11 @@ def register_view(request):
     password = data.get('password')
     password2 = data.get('password2')
 
-    # if password != password2:
-    #     return Response({'detail': 'Passwords do not match.'}, status=status.HTTP_400_BAD_REQUEST)
+    if not all([email, username, first_name, last_name, password, password2]):
+        return Response({'detail': 'All fields are required.'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    if password != password2:
+        return Response({'detail': 'Passwords do not match.'}, status=status.HTTP_400_BAD_REQUEST)
 
     if User.objects.filter(email=data.get('email')).exists():
         return Response({'detail': 'Email is already taken.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -92,7 +80,6 @@ def register_view(request):
             first_name=data.get('first_name'),
             last_name=data.get('last_name'),
         )
-        login(request, user, backend='custom_user_model.backends.CustomAuthBackend')
         refresh = RefreshToken.for_user(user)
         return Response({
             'detail': 'Registration successful!',

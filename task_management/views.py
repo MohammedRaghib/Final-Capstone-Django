@@ -31,12 +31,6 @@ User = get_user_model()
 def default_due_date():
     return datetime.now() + timedelta(days=30)
 
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from django.core.exceptions import ObjectDoesNotExist, ValidationError
-from datetime import datetime, timedelta
-
 @api_view(['POST', 'GET', 'PUT', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def company_view(request, companyid=None):
@@ -708,32 +702,29 @@ def personal_task_view(request, personalid=None, taskid=None):
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['GET', 'POST', 'PUT', 'DELETE'])
-@permission_classes([IsAuthenticated])
-def category_view(request, categoryid=None, personalid=None):
+def category_view(request, personalid=None, categoryid=None):
+    def get_category_data(category):
+        return {
+            'id': category.id,
+            'name': category.name,
+            'personal': category.personal.id if category.personal else None
+        }
+
     if request.method == 'GET':
         if categoryid:
             try:
                 category = Category.objects.get(id=categoryid)
-                category_data = {
-                    'id': category.id,
-                    'name': category.name,
-                    'personal': category.personal.id if category.personal else None
-                }
-                return Response({'detail': 'Category fetched', 'category': category_data}, status=status.HTTP_200_OK)
+                return Response({'detail': 'Category fetched', 'category': get_category_data(category)}, status=status.HTTP_200_OK)
             except Category.DoesNotExist:
                 return Response({'detail': 'Category not found'}, status=status.HTTP_404_NOT_FOUND)
         else:
-            personal = Personal_Account.objects.get(id=personalid)
-            categories = Category.objects.filter(personal=personal)
-            categories_data = [
-                {
-                    'id': category.id,
-                    'name': category.name,
-                    'personal': personalid if category.personal else None
-                }
-                for category in categories
-            ]
-            return Response({'detail': 'Categories fetched', 'categories': categories_data}, status=status.HTTP_200_OK)
+            try:
+                personal = Personal_Account.objects.get(id=personalid)
+                categories = Category.objects.filter(personal=personal)
+                categories_data = [get_category_data(category) for category in categories]
+                return Response({'detail': 'Categories fetched', 'categories': categories_data}, status=status.HTTP_200_OK)
+            except Personal_Account.DoesNotExist:
+                return Response({'detail': 'Personal account not found'}, status=status.HTTP_404_NOT_FOUND)
 
     elif request.method == 'POST':
         name = request.data.get('name')
@@ -741,14 +732,9 @@ def category_view(request, categoryid=None, personalid=None):
         if not name:
             return Response({'detail': 'Name is required'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            personal = Personal_Account.objects.get(id=personalid) if personal_id else None
+            personal = Personal_Account.objects.get(id=personal_id) if personal_id else None
             category = Category.objects.create(name=name, personal=personal)
-            category_data = {
-                'id': category.id,
-                'name': category.name,
-                'personal': category.personal.id if category.personal else None
-            }
-            return Response({'detail': 'Category created', 'category': category_data}, status=status.HTTP_201_CREATED)
+            return Response({'detail': 'Category created', 'category': get_category_data(category)}, status=status.HTTP_201_CREATED)
         except Personal_Account.DoesNotExist:
             return Response({'detail': 'Personal account not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -768,12 +754,7 @@ def category_view(request, categoryid=None, personalid=None):
                 except Personal_Account.DoesNotExist:
                     return Response({'detail': 'Personal account not found'}, status=status.HTTP_404_NOT_FOUND)
             category.save()
-            category_data = {
-                'id': category.id,
-                'name': category.name,
-                'personal': category.personal.id if category.personal else None
-            }
-            return Response({'detail': 'Category updated', 'category': category_data}, status=status.HTTP_200_OK)
+            return Response({'detail': 'Category updated', 'category': get_category_data(category)}, status=status.HTTP_200_OK)
         except Category.DoesNotExist:
             return Response({'detail': 'Category not found'}, status=status.HTTP_404_NOT_FOUND)
 
