@@ -7,7 +7,10 @@ from django.shortcuts import render, get_object_or_404
 from rest_framework import status
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from datetime import datetime, timedelta
-import time
+from django.core.mail import send_mail
+from django.conf import settings
+from custom_user_model.serializer import CustomUserSerializer
+import uuid
 from .models import (
     Company,
     Task,
@@ -25,7 +28,7 @@ from .serializers import (
     Personal_AccountSerializer,
     CategorySerializer,
 )
-from custom_user_model.serializer import CustomUserSerializer
+
 User = get_user_model()
 
 def default_due_date():
