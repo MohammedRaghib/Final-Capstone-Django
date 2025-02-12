@@ -364,13 +364,13 @@ def notification_view(request, userid, notificationid=None):
             company_id = request.data.get('company_id')
             personal_id = request.data.get('personal_id')
             task_id = request.data.get('task_id')
-
+            print(company_id, personal_id, task_id)
             company = Company.objects.get(id=company_id) if company_id else None
             personal = Personal_Account.objects.get(id=personal_id) if personal_id else None
             task = Task.objects.get(id=task_id) if task_id else None
-            if company and task:
-                notification = Notification.objects.create(user=user, task=task, message=message, company= company)
-            elif personal and task:
+            if company:
+                notification = Notification.objects.create(user=user, task=task, message=message, company=company)
+            elif personal:
                 notification = Notification.objects.create(user=user, task=task, message=message)
             else:
                 notification = Notification.objects.create(user=user, message=message)
