@@ -216,6 +216,18 @@ def task_view(request, companyid=None, taskid=None):
             due_date = request.data.get('due_date')
             task_status = request.data.get('status')
 
+            print(task_status)
+            if task_status == 'DONE':
+                print('Task is done')
+                company = Company.objects.get(id=companyid)
+                if not Notification.objects.filter(task=task.id, message=f'Task "{task.title}" is marked as done').exists():
+                    notify = Notification.objects.create(user=task.created_by, task=task, company=company, message=f'Task "{task.title}" is marked as done')
+                else:
+                    existing_notification = Notification.objects.get(task=task.id, message=f'Task "{task.title}" is marked as done')
+                    existing_notification.created_at = datetime.now()
+                    existing_notification.save()
+                    print('Notification already exists')
+
             if title:
                 task.title = title
             if description:
@@ -377,7 +389,7 @@ def notification_view(request, userid, notificationid=None):
         try:
             notification = Notification.objects.get(id=notificationid, user__id=userid)
             notification.delete()
-            return Response({'detail': 'Notification deleted'}, status=status.HTTP_204_NO_CONTENT)
+            return Response({'detail': 'Notification deleted'}, status=status.HTTP_200_OK)
         except ObjectDoesNotExist:
             return Response({'detail': 'Notification not found'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
