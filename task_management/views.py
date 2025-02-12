@@ -44,7 +44,7 @@ def company_view(request, companyid=None):
                 if entity_type == 'company':
                     Notification.objects.create(company=entity, message=message)
                 elif entity_type == 'personal':
-                    Notification.objects.create(personal=entity, message=message)
+                    Notification.objects.create(user=entity, message=message, task=task)
         try:
             company = Company.objects.filter(id=companyid).first()
             if not company:
@@ -77,7 +77,7 @@ def company_view(request, companyid=None):
                 personal_tasks = personal.personal_tasks.all()
                 for task in personal_tasks:
                     if task.due_date == current_date + timedelta(days=1) and task.status != 'DONE':
-                        create_notification(task, personal, 'personal')
+                        create_notification(task, request.user, 'personal')
 
                 personal_data = {
                     "id": personal.id,
@@ -186,7 +186,8 @@ def task_view(request, companyid=None, taskid=None):
                     try:
                         notification_user = Notification.objects.create(
                             user=assignee, 
-                            message=f'You have been assigned the task "{task.title}"'
+                            message=f'You have been assigned the task "{task.title}"',
+                            task=task,
                         )
                         print(f"Notification created for user: {assignee}")
                     except Exception as e:
@@ -777,7 +778,7 @@ def get_users_for_admin(request):
         search_query = request.query_params.get('search', '')
         model = request.query_params.get('model')
         if model == 'company':
-            users = User.objects.filter(company__isnull=True, is_superuser=False)
+            users = User.objects.filter(users__isnull=True, is_superuser=False, company__admin__isnull=True)
         elif model == 'personal':
             users = User.objects.filter(personal__isnull=True, is_superuser=False)
         else:
