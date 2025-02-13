@@ -42,12 +42,14 @@ def company_view(request, companyid=None):
             if not Notification.objects.filter(task=task.id).exists():
                 message = f'{task.title} is due in one day'
                 if entity_type == 'company':
-                    Notification.objects.create(company=entity, message=message)
+                    company = Company.objects.filter(id=entity).first()
+                    Notification.objects.create(company=company, message=message, task=task)
                 elif entity_type == 'personal':
                     Notification.objects.create(user=entity, message=message, task=task)
         try:
             company = Company.objects.filter(id=companyid).first()
             if not company:
+                print('No company found')
                 raise ObjectDoesNotExist("Company not found")
 
             company_tasks = company.tasks.prefetch_related('assigned_to').all()
@@ -387,7 +389,9 @@ def notification_view(request, userid, notificationid=None):
 
     elif request.method == 'DELETE':
         try:
-            notification = Notification.objects.get(id=notificationid, user__id=userid)
+            if not notificationid:
+               print('No notification ID')
+            notification = Notification.objects.get(id=notificationid)
             notification.delete()
             return Response({'detail': 'Notification deleted'}, status=status.HTTP_200_OK)
         except ObjectDoesNotExist:
